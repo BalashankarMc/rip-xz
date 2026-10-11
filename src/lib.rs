@@ -1,4 +1,7 @@
+#![allow(dead_code)]
+
 mod decompress;
+mod checksums;
 
 use anyhow::{Result, anyhow, bail};
 pub use decompress::decompress;
@@ -6,6 +9,7 @@ pub use decompress::decompress;
 const XZ_MAGIC: [u8; 6] = [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00];
 const FOOTER_MAGIC: [u8; 2] = [0x59, 0x5A];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Buffer<'a> {
     data: &'a [u8],
     cursor: usize
@@ -68,6 +72,7 @@ impl<'a> Buffer<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BackwardsBuffer<'a> {
     data: &'a [u8],
     cursor: usize
@@ -111,4 +116,110 @@ impl<'a> BackwardsBuffer<'a> {
 
     /// Get the current index into the buffer
     pub fn position(&self) -> usize { self.cursor }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{BackwardsBuffer, Buffer, XZ_MAGIC};
+
+    #[test]
+    fn test_new_buffer() {
+        assert_eq!(Buffer::new(&XZ_MAGIC), Buffer { data: &XZ_MAGIC, cursor: 0 })
+    }
+
+    #[test]
+    fn test_buffer_get() {
+        let mut buffer = Buffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.get(XZ_MAGIC.len()).unwrap(), XZ_MAGIC);
+    }
+
+    #[test]
+    fn test_buffer_next() {
+        let mut buffer = Buffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[0]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[1]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[2]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[3]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[4]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[5]);
+    }
+
+    #[test]
+    fn test_buffer_peek() {
+        let buffer = Buffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.peek(1).unwrap(), XZ_MAGIC[1]);
+        assert_eq!(buffer.cursor, 0)
+    }
+
+    #[test]
+    fn test_buffer_data() {
+        let buffer = Buffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.data(), &XZ_MAGIC);
+    }
+
+    #[test]
+    fn test_buffer_position() {
+        let mut buffer = Buffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.position(), 0);
+        let _ = buffer.next_val().unwrap();
+        assert_eq!(buffer.position(), 1);
+    }
+
+    #[test]
+    fn test_buffer_child() {
+        let buffer = Buffer::new(&XZ_MAGIC);
+        let child = buffer.child(1).unwrap();
+        assert_eq!(child.data(), &buffer.data()[1..])
+    }
+
+    #[test]
+    fn test_buffer_advance() {
+        let mut buffer = Buffer::new(&XZ_MAGIC);
+        buffer.advance(1).unwrap();
+        assert_eq!(buffer.position(), 1);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[1])
+    }
+
+    #[test]
+    fn test_rbuffer_new() {
+        let buffer = BackwardsBuffer::new(&XZ_MAGIC);
+        assert_eq!(buffer, BackwardsBuffer { data: &XZ_MAGIC, cursor: XZ_MAGIC.len() } )
+    }
+
+    #[test]
+    fn test_rbuffer_peek() {
+        let buffer = BackwardsBuffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.peek(0).unwrap(), XZ_MAGIC[0])
+    }
+
+    #[test]
+    fn test_rbuffer_get() {
+        let mut buffer = BackwardsBuffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.get(4).unwrap(), &XZ_MAGIC[2..])
+    }
+
+    #[test]
+    fn test_rbuffer_next() {
+        let mut buffer = BackwardsBuffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[5]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[4]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[3]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[2]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[1]);
+        assert_eq!(buffer.next_val().unwrap(), XZ_MAGIC[0]);
+    }
+
+    #[test]
+    fn test_rbuffer_data() {
+        let buffer = BackwardsBuffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.data(), &XZ_MAGIC);
+    }
+
+    #[test]
+    fn test_rbuffer_position() {
+        let mut buffer = BackwardsBuffer::new(&XZ_MAGIC);
+        assert_eq!(buffer.position(), XZ_MAGIC.len());
+        let _ = buffer.next_val();
+        assert_eq!(buffer.position(), XZ_MAGIC.len() - 1)
+    }
 }
