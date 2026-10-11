@@ -4,3 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+crc-fast = "1.10.0"
+lzma-turbo = { version = "0.8.0", default-features = false, features = ["asm", "std"] }
+rayon = "1.12.0"
+sha2 = "0.11.0"
+
+[profile.release]
+debug = true
+lto = "fat"
+codegen-units = 1
+panic = "abort"
